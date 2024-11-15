@@ -1,0 +1,14 @@
+[package]
+name = "text-embeddings-backend-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+
+[dependencies]
+thiserror = "^1.0"
+clap = { version = "^4.1", features = ["derive"], optional = true }
+nohash-hasher = "^0.2"
+
+[features]
+clap = ["dep:clap"]
