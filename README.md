@@ -33,21 +33,33 @@ export PATH=/usr/local/python3.10.2/lib/python3.10/site-packages/torch/bin:$PATH
 ### 3. 安装
 安装text-embeddings-inference
 ```bash
-cd ./text-embeddings-inference
+cd ./text-embeddings-inference-npu
 cargo install --path router -F python -F http --no-default-features
 cd ./backends/python/server
 make install
 ```
-安装mc-cli
+安装 mind-cli 并创建touch 2.2.0虚拟环境
 ```bash
-cd ./text-embeddings-inference/model-compile-cli
-pip install .
+cd ./text-embeddings-inference-npu/mind-cli
+make install-all
 ```
+> 仅安装 mind-cli
+> ```bash
+> cd ./text-embeddings-inference-npu/mind-cli
+> make install
+> ```
 
 ## 使用
-### 1. 使用MindIE Torch对文本嵌入模型/重排序模型进行编译优化
+### 1. 使用mind-cli对文本嵌入模型进行追踪及编译优化
 ```bash
-mc-cli trace /home/data/models/bge-large-zh-v1.5 Ascend910B3 --output_path=/home/data/models/bge-large-zh-v1.5
+mind-cli trace-and-compile /home/data/models/bge-large-zh-v1.5
+```
+### 1. 使用mind-cli对重排序模型进行编译优化
+```bash
+source venv/bin/active
+mind-cli trace /home/data/models/bge-reranker-large --rerank
+deactivate
+mind-cli compile /home/data/models/bge-reranker-large --rerank
 ```
 
 ### 2.设置TEI运行显卡编号 

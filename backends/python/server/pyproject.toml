@@ -20,7 +20,8 @@ loguru = "^0.6.0"
 opentelemetry-api = "^1.15.0"
 opentelemetry-exporter-otlp = "^1.15.0"
 opentelemetry-instrumentation-grpc = "^0.36b0"
-torch = { version = "2.1.0" }
+torch = { version = "2.1.2" }
+torch_npu = { version = "2.1.0.post8" }
 
 [tool.poetry.extras]
 
