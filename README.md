@@ -35,6 +35,7 @@ export PATH=/usr/local/python3.10.2/lib/python3.10/site-packages/torch/bin:$PATH
 ```bash
 cd ./text-embeddings-inference-npu
 cargo install --path router -F python -F http --no-default-features
+cp target/release/text-embeddings-router /usr/local/bin/text-embeddings-router
 cd ./backends/python/server
 make install
 ```
@@ -103,7 +104,7 @@ curl 127.0.0.1:8035/embed \
 ```bash
 curl 127.0.0.1:8035/embed \ 
 -X POST \
--d '{"inputs":"What is Deep Learning?"}' \     
+-d '{"inputs":["What is Deep Learning?", "What is Deep Learning?"]}' \     
 -H 'Content-Type: application/json'
 ```
 
