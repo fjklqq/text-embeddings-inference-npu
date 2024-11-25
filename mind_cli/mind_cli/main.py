@@ -199,9 +199,9 @@ def trace_and_compile(model_name_or_path: Annotated[str, typer.Argument(help='Mo
         mindietorch.Input(min_shape=min_shape, max_shape=max_shape, dtype=torch.int32)
     ]
     if is_rerank_model:
-        precision_policy = mindietorch.PrecisionPolicy.FP16,
+        precision_policy = mindietorch.PrecisionPolicy.FP16
     else:
-        precision_policy = mindietorch.PrecisionPolicy.FP32,
+        precision_policy = mindietorch.PrecisionPolicy.FP32
 
     typer.echo(typer.style('INFO: ', fg=typer.colors.BLUE, bold=True) + "Compiling model ...")
     with torch.no_grad():
