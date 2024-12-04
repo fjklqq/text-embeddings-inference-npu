@@ -1,6 +1,6 @@
 import os
 import torch
-import mindietorch
+import torch_npu
 
 from loguru import logger
 from pathlib import Path
@@ -28,7 +28,7 @@ if FLASH_ATTENTION:
     __all__.append(FlashBert)
 
 
-def get_model(model_path: Path, dtype: Optional[str]):
+def get_model(model_path: Path, dtype: Optional[str], pool: str = 'cls'):
     if dtype == "float32":
         dtype = torch.float32
     elif dtype == "float16":
@@ -40,7 +40,7 @@ def get_model(model_path: Path, dtype: Optional[str]):
 
     deviceIdx = os.environ.get('TEI_NPU_DEVICE', '0')
     if deviceIdx != None and deviceIdx.isdigit() and int(deviceIdx) >= 0 and int(deviceIdx) <= 7:
-        mindietorch.set_device(int(deviceIdx))
+        torch_npu.npu.set_device(int(deviceIdx))
         device = torch.device(f"npu:{int(deviceIdx)}")
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     if config.architectures[0].endswith("Classification"):
@@ -53,7 +53,9 @@ def get_model(model_path: Path, dtype: Optional[str]):
                 and dtype in [torch.float16, torch.bfloat16]
                 and FLASH_ATTENTION
         ):
+            if pool != 'cls':
+                raise ValueError("FlashBert only supports cls pooling")
             return FlashBert(model_path, device, dtype)
         else:
-            return DefaultModel(model_path, device, dtype)
+            return DefaultModel(model_path, device, dtype, pool)
     raise NotImplementedError

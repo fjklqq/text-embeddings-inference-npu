@@ -1,119 +1,63 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.75-bookworm AS chef
-WORKDIR /usr/src
-
-ENV SCCACHE=0.5.4
-ENV RUSTC_WRAPPER=/usr/local/bin/sccache
-
-# Donwload and configure sccache
-RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v$SCCACHE/sccache-v$SCCACHE-x86_64-unknown-linux-musl.tar.gz | tar -xzv --strip-components=1 -C /usr/local/bin sccache-v$SCCACHE-x86_64-unknown-linux-musl/sccache && \
-    chmod +x /usr/local/bin/sccache
-
-FROM chef AS planner
+FROM rust:1.83.0 as router-builder
+WORKDIR /
 
 COPY backends backends
-COPY core core
+COPY core /core
 COPY router router
 COPY Cargo.toml ./
 COPY Cargo.lock ./
 
-RUN cargo chef prepare  --recipe-path recipe.json
+ENV PATH="$PATH:~/.cargo/bin/"
+ENV PATH="$PATH=/usr/local/python3.11.10/lib/python3.11/site-packages/torch/bin:$PATH"
 
-FROM chef AS builder
+RUN apt update && apt install --no-install-recommends -y protobuf-compiler && \
+    cargo install --path router -F python -F http --no-default-features
 
-ARG GIT_SHA
-ARG DOCKER_LABEL
+FROM ubuntu:22.04 as base
 
-# sccache specific variables
-ARG ACTIONS_CACHE_URL
-ARG ACTIONS_RUNTIME_TOKEN
-ARG SCCACHE_GHA_ENABLED
+ARG RUST_VERSION=1.82.0
+ARG PYTHON_VERSION=3.11.10
+ARG PYTHON_BIG_VERSION=3.11
+ARG ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest
 
-RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-| gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null && \
-  echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
-  tee /etc/apt/sources.list.d/oneAPI.list
+ENV LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/lib64/plugin/opskernel:${ASCEND_TOOLKIT_HOME}/lib64/plugin/nnengine:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe/op_tiling/lib/linux/$(arch):${ASCEND_TOOLKIT_HOME}/tools/aml/lib64:${ASCEND_TOOLKIT_HOME}/tools/aml/lib64/plugin:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/python${PYTHON_VERSION}/lib \
+    ASCEND_TOOLKIT_HOME=${ASCEND_TOOLKIT_HOME} \
+    PYTHONPATH=${ASCEND_TOOLKIT_HOME}/python/site-packages:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe \
+    PATH=${ASCEND_TOOLKIT_HOME}/bin:${ASCEND_TOOLKIT_HOME}/compiler/ccec_compiler/bin:${ASCEND_TOOLKIT_HOME}/tools/ccec_compiler/bin:/usr/local/python${PYTHON_VERSION}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    ASCEND_AICPU_PATH=${ASCEND_TOOLKIT_HOME} \
+    ASCEND_OPP_PATH=${ASCEND_TOOLKIT_HOME}/opp \
+    TOOLCHAIN_HOME=${ASCEND_TOOLKIT_HOME}/toolkit \
+    ASCEND_HOME_PATH=${ASCEND_TOOLKIT_HOME}
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    intel-oneapi-mkl-devel=2024.0.0-49656 \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+COPY backends /usr/local/text-embeddings-inference-npu-backends
 
-RUN echo "int mkl_serv_intel_cpu_true() {return 1;}" > fakeintel.c && \
-    gcc -shared -fPIC -o libfakeintel.so fakeintel.c
+RUN apt update && \
+    apt install --no-install-recommends -y gcc make build-essential libssl-dev zlib1g-dev libbz2-dev libsqlite3-dev && \
+    apt install --no-install-recommends -y wget curl xz-utils libffi-dev  pkg-config
 
-COPY --from=planner /usr/src/recipe.json recipe.json
 
-RUN cargo chef cook --release --features candle --features mkl-dynamic --no-default-features --recipe-path recipe.json && sccache -s
+RUN wget https://mirrors.aliyun.com/python-release/source/Python-${PYTHON_VERSION}.tar.xz --no-check-certificate && \
+    tar -xf Python-${PYTHON_VERSION}.tar.xz && \
+    cd Python-${PYTHON_VERSION} && ./configure --prefix=/usr/local/python${PYTHON_VERSION} --enable-optimizations --enable-shared && \
+    make -j$(nproc) && make install && \
+    ln -s /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/local/python${PYTHON_VERSION}/bin/python && \
+    ln -s /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/local/python${PYTHON_VERSION}/bin/pip && \
+    pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.trusted-host mirrors.aliyun.com && \
+    pip install attrs==23.2.0 numpy==1.26.4 decorator==5.1.1 sympy==1.12.1 psutil==6.0.0 torch==2.1.0 torch_npu==2.1.0.post8 && \
+    pip install grpcio-tools==1.51.1 mypy-protobuf==3.4.0 'types-protobuf>=3.20.4'  && \
+    cd /usr/local/text-embeddings-inference-npu-backends/python/server && make install && \
+    apt clean && rm -rf /var/lib/apt/lists/* && \
+    rm -rf /Python* && rm -rf ~/.cache/pip
 
-COPY backends backends
-COPY core core
-COPY router router
-COPY Cargo.toml ./
-COPY Cargo.lock ./
+COPY --from=router-builder /usr/local/cargo/bin/text-embeddings-router /usr/local/bin/text-embeddings-router
 
-FROM builder as http-builder
+FROM base
 
-RUN cargo build --release --bin text-embeddings-router -F candle -F mkl-dynamic -F http --no-default-features && sccache -s
+ENV PORT=80 \
+    TEI_NPU_DEVICE=0
 
-FROM builder as grpc-builder
-
-RUN PROTOC_ZIP=protoc-21.12-linux-x86_64.zip && \
-    curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP && \
-    unzip -o $PROTOC_ZIP -d /usr/local bin/protoc && \
-    unzip -o $PROTOC_ZIP -d /usr/local 'include/*' && \
-    rm -f $PROTOC_ZIP
-
-COPY proto proto
-
-RUN cargo build --release --bin text-embeddings-router -F grpc -F candle -F mkl-dynamic --no-default-features && sccache -s
-
-FROM debian:bookworm-slim as base
-
-ENV HUGGINGFACE_HUB_CACHE=/data \
-    PORT=80 \
-    MKL_ENABLE_INSTRUCTIONS=AVX512_E4 \
-    RAYON_NUM_THREADS=8 \
-    LD_PRELOAD=/usr/local/libfakeintel.so \
-    LD_LIBRARY_PATH=/usr/local/lib
-
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libomp-dev \
-    ca-certificates \
-    libssl-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy a lot of the Intel shared objects because of the mkl_serv_intel_cpu_true patch...
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_intel_lp64.so.2 /usr/local/lib/libmkl_intel_lp64.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_intel_thread.so.2 /usr/local/lib/libmkl_intel_thread.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_core.so.2 /usr/local/lib/libmkl_core.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_vml_def.so.2 /usr/local/lib/libmkl_vml_def.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_def.so.2 /usr/local/lib/libmkl_def.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_vml_avx2.so.2 /usr/local/lib/libmkl_vml_avx2.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_vml_avx512.so.2 /usr/local/lib/libmkl_vml_avx512.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_avx2.so.2 /usr/local/lib/libmkl_avx2.so.2
-COPY --from=builder /opt/intel/oneapi/mkl/latest/lib/intel64/libmkl_avx512.so.2 /usr/local/lib/libmkl_avx512.so.2
-COPY --from=builder /usr/src/libfakeintel.so /usr/local/libfakeintel.so
-
-FROM base as grpc
-
-COPY --from=grpc-builder /usr/src/target/release/text-embeddings-router /usr/local/bin/text-embeddings-router
-
-ENTRYPOINT ["text-embeddings-router"]
-CMD ["--json-output"]
-
-FROM base AS http
-
-COPY --from=http-builder /usr/src/target/release/text-embeddings-router /usr/local/bin/text-embeddings-router
-
-# Amazon SageMaker compatible image
-FROM http as sagemaker
-COPY --chmod=775 sagemaker-entrypoint.sh entrypoint.sh
-
-ENTRYPOINT ["./entrypoint.sh"]
-
-# Default image
-FROM http
+EXPOSE 80
 
 ENTRYPOINT ["text-embeddings-router"]
 CMD ["--json-output"]

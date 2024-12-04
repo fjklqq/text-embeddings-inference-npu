@@ -4,11 +4,12 @@
 # @Software : Python 3.11
 # @About    :
 import torch
-import mindietorch
+import torch_npu
 from pathlib import Path
 from typing import Type, List
 from opentelemetry import trace
 from loguru import logger
+from transformers import AutoModel, AutoModelForSequenceClassification
 
 from text_embeddings_server.models import Model
 from text_embeddings_server.models.types import PaddedBatch, Embedding, Prediction, TokenEmbedding
@@ -18,8 +19,8 @@ tracer = trace.get_tracer(__name__)
 
 class RerankModel(Model):
     def __init__(self, model_path: Path, device: torch.device, dtype: torch.dtype):
-        mindietorch.set_device(device.index)
-        model = torch.jit.load(next(Path(model_path).rglob("*.pt"))).eval().to(device)
+        torch_npu.npu.set_device(device.index)
+        model = AutoModelForSequenceClassification.from_pretrained(model_path).eval().to(dtype).to(device)
         super(RerankModel, self).__init__(model=model, dtype=dtype, device=device)
 
     @property

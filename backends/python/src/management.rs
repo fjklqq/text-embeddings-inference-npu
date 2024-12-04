@@ -8,7 +8,7 @@ use std::sync::mpsc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::{env, fs, io, thread};
-use text_embeddings_backend_core::BackendError;
+use text_embeddings_backend_core::{BackendError, Pool};
 
 #[derive(Debug)]
 pub(crate) struct BackendProcess {
@@ -21,6 +21,7 @@ impl BackendProcess {
         dtype: String,
         uds_path: &str,
         otlp_endpoint: Option<String>,
+        pool:Pool,
     ) -> Result<Self, BackendError> {
         // Get UDS path
         let uds = Path::new(uds_path);
@@ -29,6 +30,18 @@ impl BackendProcess {
         if uds.exists() {
             fs::remove_file(uds).expect("could not remove UDS file");
         }
+
+        let pool = match pool {
+            Pool::Cls => "cls",
+            Pool::LastToken => "lasttoken",
+            Pool::Max => "max",
+            Pool::Mean => "mean",
+            Pool::MeanSqrtLenTokens => "mean_sqrt_len_tokens",
+            Pool::WeightedMean => "weightedmean",
+            Pool::Splade => {
+                            return Err(BackendError::Start(format!("{pool:?} is not supported")));
+            },
+        };
 
         // Process args
         let mut python_server_args = vec![
@@ -40,6 +53,8 @@ impl BackendProcess {
             "--logger-level".to_string(),
             "INFO".to_string(),
             "--json-output".to_string(),
+            "--pool".to_owned(),
+            pool.to_owned(),
         ];
 
         // OpenTelemetry

@@ -55,21 +55,24 @@ pub enum ModelType {
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum Pool {
-    /// Select the CLS token as embedding
     Cls,
-    /// Apply Mean pooling to the model embeddings
+    LastToken,
+    Max,
     Mean,
-    /// Apply SPLADE (Sparse Lexical and Expansion) to the model embeddings.
-    /// This option is only available if the loaded model is a `ForMaskedLM` Transformer
-    /// model.
-    Splade,
+    MeanSqrtLenTokens,
+    WeightedMean,
+    Splade
 }
 
 impl fmt::Display for Pool {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Pool::Cls => write!(f, "cls"),
+            Pool::LastToken => write!(f, "last_token"),
+            Pool::Max => write!(f, "max"),
             Pool::Mean => write!(f, "mean"),
+            Pool::MeanSqrtLenTokens => write!(f, "mean_sqrt_len_tokens"),
+            Pool::WeightedMean => write!(f, "weightedmean"),
             Pool::Splade => write!(f, "splade"),
         }
     }

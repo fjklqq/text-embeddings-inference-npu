@@ -1,6 +1,6 @@
 import asyncio
 import torch
-import mindietorch
+import torch_npu
 
 from grpc import aio
 from loguru import logger
@@ -22,8 +22,8 @@ class EmbeddingService(embed_pb2_grpc.EmbeddingServiceServicer):
         self._inference_mode_raii_guard = torch._C._InferenceMode(True)
 
     async def Health(self, request, context):
-        if self.model.device.type == "cuda":
-            torch.zeros((2, 2), device="cuda")
+        if self.model.device.type == "npu":
+            torch.zeros((2, 2), device="npu")
         return embed_pb2.HealthResponse()
 
     async def Embed(self, request, context):
@@ -53,6 +53,7 @@ def serve(
     model_path: Path,
     dtype: Optional[str],
     uds_path: Path,
+    pool:str='cls'
 ):
     async def serve_inner(
         model_path: Path,
@@ -61,7 +62,7 @@ def serve(
         unix_socket = f"unix://{uds_path}"
 
         try:
-            model = get_model(model_path, dtype)
+            model = get_model(model_path, dtype, pool)
         except Exception:
             logger.exception("Error when initializing model")
             raise

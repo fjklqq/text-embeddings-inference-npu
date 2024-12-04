@@ -23,21 +23,21 @@ impl PythonBackend {
         uds_path: String,
         otlp_endpoint: Option<String>,
     ) -> Result<Self, BackendError> {
-        match model_type {
+        let pool = match model_type {
             ModelType::Classifier => {
                  let pool = Pool::Cls;
                  pool
             }
             ModelType::Embedding(pool) => {
-                if pool != Pool::Cls {
-                    return Err(BackendError::Start(format!("{pool:?} is not supported")));
-                }
+//                 if pool != Pool::Cls {
+//                     return Err(BackendError::Start(format!("{pool:?} is not supported")));
+//                 }
                 pool
             }
         };
 
         let backend_process =
-            management::BackendProcess::new(model_path, dtype, &uds_path, otlp_endpoint)?;
+            management::BackendProcess::new(model_path, dtype, &uds_path, otlp_endpoint, pool)?;
         let tokio_runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -86,7 +86,6 @@ impl Backend for PythonBackend {
 
         let mut embeddings =
             HashMap::with_capacity_and_hasher(batch_size, BuildNoHashHasher::default());
-
         if !batch.pooled_indices.is_empty() {
             let results = self
                 .tokio_runtime
