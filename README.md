@@ -4,7 +4,12 @@
 
 **目前只在`Ascend 910B3`上进行过测试**
 
+[![][github-release-shield]][github-release-link]
+[![][docker-release-shield]][docker-release-link]
+
 ## Docker部署
+[![][docker-size-shield]][docker-release-link]
+[![][docker-pulls-shield]][docker-release-link]
 
 ```shell
 model=BAAI/bge-large-en-v1.5
@@ -28,7 +33,7 @@ curl 127.0.0.1:8080/embed \
 
 
 ## 本地部署
-### 1. 安装rush
+### 1. 安装rust
 ```bash
 # 对于ARM 64位CPU为aarch64，对于X86 64位CPU可将下面指令的aarch64替换为x86_64
 wget https://static.rust-lang.org/dist/rust-1.82.0-aarch64-unknown-linux-gnu.tar.gz --no-check-certificate
@@ -66,7 +71,7 @@ make install
 ```
 
 ## 使用
-### 1.设置TEI运行显卡编号 
+### 1.设置TEI运行NPU编号 
 ```bash
 export TEI_NPU_DEVICE=0
 ```
@@ -119,3 +124,10 @@ curl 127.0.0.1:8036/rerank \
 -H 'Content-Type: application/json'
 ```
 
+[github-release-shield]: https://img.shields.io/github/v/release/fjklqq/text-embeddings-inference-npu?color=369eff&labelColor=black&logo=github&style=flat-square
+[github-release-link]: https://github.com/fjklqq/text-embeddings-inference-npu/releases
+
+[docker-release-link]: https://hub.docker.com/r/fjklqq/text-embeddings-inference
+[docker-release-shield]: https://img.shields.io/docker/v/fjklqq/text-embeddings-inference?color=369eff&label=docker&labelColor=black&logo=docker&logoColor=white&style=flat-square
+[docker-pulls-shield]: https://img.shields.io/docker/pulls/fjklqq/text-embeddings-inference?color=45cc11&labelColor=black&style=flat-square
+[docker-size-shield]: https://img.shields.io/docker/image-size/fjklqq/text-embeddings-inference?color=369eff&labelColor=black&style=flat-square
